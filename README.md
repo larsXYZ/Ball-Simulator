@@ -15,7 +15,7 @@ R - New remover
 
 T - Draw terrain
 
-c - Clear items (Does not clear items if you hold their respective buttons)
+C - Clear items (Does not clear items if you hold their respective buttons)
 
 ----------------------------------------------
 
