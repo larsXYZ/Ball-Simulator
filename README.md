@@ -15,6 +15,8 @@ R - New remover
 
 T - Draw terrain
 
+c - Clear items (Does not clear items if you hold their respective buttons)
+
 ----------------------------------------------
 
 Uses SFML 2.3.2
