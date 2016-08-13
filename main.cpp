@@ -1,6 +1,5 @@
 #include <SFML\Main.hpp>
 #include <SFML\Graphics.hpp>
-#include <TGUI/TGUI.hpp>
 #include <vector>
 #include <iostream>
 
@@ -26,11 +25,15 @@ const double PRED_VECTORS_START_ALPHA = 200;
 const int PRED_VECTORS_AMOUNT = 100;
 const double PRED_VECTOR_TIME_STEP = 0.1;
 
+const double GRAVITY_WELL_CUTOFF_CLOSE_DIST = 15;
+const double GRAVITY_FIELD_LINE_START_NUMBER = 20;
+
+
 
 //TOGGLES & VALUES
 sf::Vector3f newObjectInfoVector(0, 0, 0);
-double newBallRad = BALL_RAD_START;
 sf::Vector2f lastMouseFreeHand;
+double newBallRad = BALL_RAD_START;
 bool PAUSE = false;
 
 //ELEMENTS OF THE SIM
@@ -95,9 +98,20 @@ struct ballSpawner
 };
 std::vector<ballSpawner> spawnerList;
 
+struct gravityWell
+{
+	sf::Vector2f pos;
+	double strength;
+	double rad;
+
+	gravityWell(sf::Vector2f p, double s, double r) { pos = p; strength = s; rad = r; }
+
+};
+std::vector<gravityWell> gravityWellList;
+
 
 //||||||||||||FUNCTIONS||||||||||||||||||||
-void checkIfBallCollidesFurther(Ball & b);
+
 
 /*BALLS*/
 void gravityVerticalBalls(std::vector<Ball> &l)
@@ -131,6 +145,31 @@ void calculateGravityAttraction(Ball &b, std::vector<Ball> &l)
 		}
 	}
 }
+void calculateGravityWellAttraction(std::vector<Ball> &l, std::vector<gravityWell> &gl)
+{
+	for (int q = 0; q < gl.size(); q++)
+	{
+		for (int i = 0; i < l.size(); i++)
+		{
+			double dx = l[i].body.getPosition().x - gl[q].pos.x;
+			double dy = l[i].body.getPosition().y - gl[q].pos.y;
+			double r2 = dx*dx + dy*dy;
+			double r = sqrt(r2);
+
+			if (r > GRAVITY_WELL_CUTOFF_CLOSE_DIST && r < gl[q].rad)
+			{
+				double acc = G * gl[q].strength / r;
+
+				sf::Vector2f normDist;
+				normDist.x = dx / r;
+				normDist.y = dy / r;
+
+				l[i].acceleration.x -= acc * normDist.x;
+				l[i].acceleration.y -= acc * normDist.y;
+			}
+		}
+	}
+}
 void calcForces(std::vector<Ball> &l)
 {
 	for (int i = 0; i < l.size(); i++) l[i].acceleration = sf::Vector2f(0, 0);
@@ -142,6 +181,7 @@ void calcForces(std::vector<Ball> &l)
 			calculateGravityAttraction(l[i], l);
 		}
 	}
+	calculateGravityWellAttraction(ballList, gravityWellList);
 }
 void updateVelocities(std::vector<Ball> &l)
 {
@@ -172,8 +212,6 @@ void drawBalls(std::vector<Ball> &l, sf::RenderWindow &w)
 		w.draw(l[i].body);
 	}
 }
-
-/*ADD BALL*/
 void addBallWithMouse(std::vector<Ball> &l, sf::RenderWindow &w, sf::Vector2f vel, sf::Vector2f pos)
 {
 	Ball newBall(pos, newBallRad);
@@ -237,6 +275,7 @@ void addBallDrawMouseVector(sf::RenderWindow &w)
 
 	}
 }
+void checkIfBallCollidesFurther(Ball & b);
 
 /*BALL COLLISION*/
 bool isCollisionBetweenBalls(Ball &b1, Ball &b2)
@@ -306,7 +345,7 @@ void drawWalls(std::vector<Wall> &l, sf::RenderWindow &w)
 	for (int i = 0; i < l.size(); i++)
 	{
 		sf::Color col;
-		if (l[i].killer) col = sf::Color(150, 0, 0,150);
+		if (l[i].killer) col = sf::Color(255, 0, 0,170);
 		else col = sf::Color::White;
 
 
@@ -393,8 +432,6 @@ void checkBallToWallCollision()
 		}
 	}
 }
-
-/*ADD WALL*/
 void addWallWithMouse(std::vector<Wall> &l, sf::RenderWindow &w, sf::Vector2f pos, bool kill)
 {
 	sf::Vector2f mPos = w.mapPixelToCoords(sf::Mouse::getPosition(w), w.getView());
@@ -480,8 +517,6 @@ void updateSpawners(std::vector<ballSpawner> &l, std::vector<Ball> &bl)
 		}
 	}
 }
-
-/*ADD SPAWNER*/
 void addSpawnerWithMouse(std::vector<ballSpawner> &l, sf::RenderWindow &w, sf::Vector2f pos)
 {
 	sf::Vector2f mPos = w.mapPixelToCoords(sf::Mouse::getPosition(w), w.getView());
@@ -490,6 +525,86 @@ void addSpawnerWithMouse(std::vector<ballSpawner> &l, sf::RenderWindow &w, sf::V
 
 	l.push_back(ballSpawner(pos,sf::Vector2f(deltaPos.x*slingShotStrength,deltaPos.y*slingShotStrength), newBallRad, 10));
 }
+
+/*GRAVITYWELL*/
+void drawGravityWells(std::vector<gravityWell> &l, sf::RenderWindow &w)
+{
+
+	//WELLS
+	for (int i = 0; i < l.size(); i++)
+	{
+
+		double angle;
+		double dist = GRAVITY_WELL_CUTOFF_CLOSE_DIST;
+		double acc = G*l[i].strength / dist;
+		int numberLines = GRAVITY_FIELD_LINE_START_NUMBER;
+
+		//LAYERS
+		while (dist < l[i].rad)
+		{
+			angle = 0;
+
+			//LINES
+			for (int e = 0; e < numberLines; e++)
+			{
+				sf::Vertex viz[2]
+				{
+					sf::Vertex(l[i].pos + sf::Vector2f(dist*cos(angle),dist*sin(angle)),sf::Color(50,255,148,170)),
+					sf::Vertex(l[i].pos + sf::Vector2f((dist - 0.1*acc)*cos(angle),(dist - 0.1*acc)*sin(angle)),sf::Color(50,255,148,0))
+				};
+				w.draw(viz, 2, sf::Lines);
+
+				angle += 2 * PI / numberLines;
+			}
+
+			dist += 15;
+			numberLines += 3;
+			acc = g*l[i].strength / dist;
+
+		}
+
+		//CIRCLE
+		sf::CircleShape outerCircle(l[i].rad);
+		outerCircle.setOrigin(l[i].rad, l[i].rad);
+		outerCircle.setPosition(l[i].pos);
+		outerCircle.setFillColor(sf::Color(0, 0, 0, 0));
+		outerCircle.setOutlineThickness(-1);
+		outerCircle.setOutlineColor(sf::Color(50, 255, 148, 70));
+		w.draw(outerCircle);
+	}
+}
+void addGravityWellWithMouse(std::vector<gravityWell> &l, sf::RenderWindow &w, sf::Vector2f pos)
+{
+	sf::Vector2f mPos = w.mapPixelToCoords(sf::Mouse::getPosition(w), w.getView());
+	sf::Vector2f deltaPos = pos - mPos;
+	double r = sqrt(deltaPos.x*deltaPos.x + deltaPos.y*deltaPos.y);
+
+	l.push_back(gravityWell(pos, 200 * newBallRad, r));
+}
+void addGravityWellDrawNew(sf::RenderWindow &w)
+{
+	if (newObjectInfoVector.z == 0 ) return;
+
+
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Y))
+	{
+
+		sf::Vector2f loggedPos = sf::Vector2f(newObjectInfoVector.x, newObjectInfoVector.y);
+		sf::Vector2f mPos = w.mapPixelToCoords(sf::Mouse::getPosition(w), w.getView());
+		sf::Vector2f deltaPos = mPos - loggedPos;
+		double r = sqrt(deltaPos.x*deltaPos.x + deltaPos.y*deltaPos.y);
+
+		sf::CircleShape outerCircle(r);
+		outerCircle.setOrigin(r,r);
+		outerCircle.setPosition(loggedPos);
+		outerCircle.setFillColor(sf::Color(0, 0, 0, 0));
+		outerCircle.setOutlineThickness(-1);
+		outerCircle.setOutlineColor(sf::Color(50, 255, 148, 100));
+		w.draw(outerCircle);
+	}
+
+}
+
 
 /*ICONS*/
 void drawIcons(sf::RenderWindow &w)
@@ -562,22 +677,13 @@ void drawIcons(sf::RenderWindow &w)
 }
 
 //WINDOW
-sf::RenderWindow window(sf::VideoMode(1000, 700), "Balls");
-tgui::Gui gui(window);
+sf::RenderWindow window(sf::VideoMode(1920, 1080), "Balls", sf::Style::Fullscreen);
 sf::Event event;
 
 //START
 int main()
 {
-
-	gui.setFont("DejaVuSans.ttf");
 	window.setFramerateLimit(60);
-
-	/*
-	//GUI ELEMENTS
-	tgui::ListBox::Ptr toolBox = std::make_shared<tgui::ListBox>();
-	gui.add(toolBox);
-	*/
 
 	//SIDEWALLS
 	wallList.push_back(Wall(sf::Vector2f(window.getSize().x/2, window.getSize().y-5), window.getSize().x, 0,false));
@@ -588,13 +694,8 @@ int main()
 	while (window.isOpen())
 	{
 
-		//GUI
-		gui.handleEvent(event);
-
 		while (window.pollEvent(event))
 		{
-
-
 
 			//EXIT GAME
 			if (event.type == sf::Event::Closed) window.close();
@@ -655,9 +756,15 @@ int main()
 					newObjectInfoVector.z = 0;
 				}
 
+				if (!sf::Mouse::isButtonPressed(sf::Mouse::Left) && newObjectInfoVector.z != 0 && sf::Keyboard::isKeyPressed(sf::Keyboard::Y))
+				{
+					addGravityWellWithMouse(gravityWellList, window, sf::Vector2f(newObjectInfoVector.x, newObjectInfoVector.y));
+					newObjectInfoVector.z = 0;
+				}
+
 			}
 
-			//SCROLLING CHANG0ES SIZE OF BALL
+			//SCROLLING CHANG0ES SIZE OF BALL && STRENGTH OF GRAVITYFIELD
 			if (event.type == sf::Event::MouseWheelMoved)
 			{
 				double mouseDelta = event.mouseWheel.delta;
@@ -684,6 +791,8 @@ int main()
 				if (!sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) ballList.clear();
 				if (!sf::Keyboard::isKeyPressed(sf::Keyboard::W)) wallList.clear();
 				if (!sf::Keyboard::isKeyPressed(sf::Keyboard::E)) spawnerList.clear();
+				if (!sf::Keyboard::isKeyPressed(sf::Keyboard::Y)) gravityWellList.clear();
+
 
 				//SIDEWALLS
 				wallList.push_back(Wall(sf::Vector2f(window.getSize().x / 2, window.getSize().y - 5), window.getSize().x, 0, false));
@@ -725,10 +834,11 @@ int main()
 		drawBalls(ballList, window);
 		drawWalls(wallList, window);
 		drawSpawners(spawnerList, window);
+		drawGravityWells(gravityWellList, window);
 		drawIcons(window);
 		addBallDrawMouseVector(window);
 		addWallDrawNew(window);
-		gui.draw();
+		addGravityWellDrawNew(window);
 		window.display();
 	}
 
