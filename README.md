@@ -15,6 +15,8 @@ R - New remover
 
 T - Draw terrain
 
+Y - New gravity field
+
 C - Clear items (Does not clear items if you hold their respective buttons)
 
 ----------------------------------------------
